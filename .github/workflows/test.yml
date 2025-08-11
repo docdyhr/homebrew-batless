@@ -17,6 +17,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     
     steps:
+      - name: Remove any pre-existing tap (avoid remote mismatch)
+        run: |
+          brew untap docdyhr/batless || true
+
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@master
@@ -45,8 +49,8 @@ jobs:
       - name: Test installation
         run: |
           # Test that batless is installed and working
-          batless --version
-          batless --help
+            batless --version
+            batless --help
           
           # Test basic functionality
           echo 'fn main() { println!("test"); }' > test.rs
@@ -62,13 +66,22 @@ jobs:
   test-tap-installation:
     runs-on: macos-latest
     steps:
+      - name: Remove any pre-existing tap (clean slate)
+        run: |
+          brew untap docdyhr/batless || true
+
       - name: Set up Homebrew
         uses: Homebrew/actions/setup-homebrew@master
 
+      - name: Prepare clean tap test
+        run: |
+          # Ensure we simulate a user who has not yet tapped
+          brew untap docdyhr/batless || true
+
       - name: Test tap installation
         run: |
-          # Test installing from tap (simulates user experience)
-          brew tap docdyhr/batless https://github.com/docdyhr/homebrew-batless.git
+          # Simulate user tapping without specifying URL (canonical form)
+          brew tap docdyhr/batless
           brew install batless --build-from-source
           
           # Test functionality
