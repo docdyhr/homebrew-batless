@@ -1,0 +1,94 @@
+name: Check for Updates
+
+on:
+  schedule:
+    # Check for updates twice daily
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      needs-update: ${{ steps.compare.outputs.needs-update }}
+      latest-version: ${{ steps.get-latest.outputs.version }}
+      current-version: ${{ steps.get-current.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest release from main repository
+        id: get-latest
+        run: |
+          latest=$(curl -s https://api.github.com/repos/docdyhr/batless/releases/latest | jq -r '.tag_name')
+          echo "version=$latest" >> $GITHUB_OUTPUT
+          echo "Latest version: $latest"
+
+      - name: Get current formula version
+        id: get-current
+        run: |
+          current=$(grep -o 'v[0-9][^"]*' Formula/batless.rb | head -1)
+          echo "version=$current" >> $GITHUB_OUTPUT
+          echo "Current version: $current"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          latest="${{ steps.get-latest.outputs.version }}"
+          current="${{ steps.get-current.outputs.version }}"
+          
+          if [ "$latest" != "$current" ]; then
+            echo "needs-update=true" >> $GITHUB_OUTPUT
+            echo "🔄 Update needed: $current → $latest"
+          else
+            echo "needs-update=false" >> $GITHUB_OUTPUT
+            echo "✅ Formula is up to date: $current"
+          fi
+
+  create-update-issue:
+    needs: check-version
+    if: needs.check-version.outputs.needs-update == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create update issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automation,update-needed'
+            });
+            
+            const existingIssue = issues.find(issue => 
+              issue.title.includes('Update batless to ${{ needs.check-version.outputs.latest-version }}')
+            );
+            
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Update batless to ${{ needs.check-version.outputs.latest-version }}',
+                body: |
+                  ## Formula Update Required
+
+                  A new version of batless is available and needs to be updated in the Homebrew formula.
+
+                  **Current version:** ${{ needs.check-version.outputs.current-version }}
+                  **Latest version:** ${{ needs.check-version.outputs.latest-version }}
+
+                  ### To update manually:
+                  1. Run the "Update Formula" workflow with the new version and SHA256
+                  2. Or wait for the automated update from the main repository
+
+                  ### Release notes:
+                  https://github.com/docdyhr/batless/releases/tag/${{ needs.check-version.outputs.latest-version }}
+
+                  _This issue was created automatically by the update checker._,
+                labels: ['automation', 'update-needed']
+              });
+              console.log('Created update issue');
+            } else {
+              console.log('Update issue already exists');
+            }

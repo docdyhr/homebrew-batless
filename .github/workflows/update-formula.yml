@@ -1,0 +1,90 @@
+name: Update Formula
+
+on:
+  repository_dispatch:
+    types: [update-formula]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update to (e.g., v0.2.5)'
+        required: true
+        type: string
+      sha256:
+        description: 'SHA256 hash of the source tarball'
+        required: true
+        type: string
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+
+      - name: Update formula
+        run: |
+          VERSION="${{ github.event.inputs.version || github.event.client_payload.version }}"
+          SHA256="${{ github.event.inputs.sha256 || github.event.client_payload.sha256 }}"
+          
+          # Remove 'v' prefix if present
+          VERSION_CLEAN=${VERSION#v}
+          
+          echo "Updating formula to version: $VERSION_CLEAN"
+          echo "SHA256: $SHA256"
+          
+          # Update the formula file
+          sed -i "s|url \".*\"|url \"https://github.com/docdyhr/batless/archive/refs/tags/v${VERSION_CLEAN}.tar.gz\"|" Formula/batless.rb
+          sed -i "s|sha256 \".*\"|sha256 \"$SHA256\"|" Formula/batless.rb
+          
+          # Show the changes
+          echo "Changes made:"
+          git diff Formula/batless.rb
+
+      - name: Validate formula syntax
+        run: |
+          # Install Homebrew for validation
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          
+          # Validate formula
+          brew audit --strict --formula Formula/batless.rb
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "batless-bot"
+          
+          VERSION="${{ github.event.inputs.version || github.event.client_payload.version }}"
+          VERSION_CLEAN=${VERSION#v}
+          
+          git add Formula/batless.rb
+          git commit -m "chore: update batless to v${VERSION_CLEAN}" || exit 0
+          git push
+
+      - name: Create pull request (if needed)
+        if: github.event_name == 'workflow_dispatch'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update batless to ${{ github.event.inputs.version }}"
+          title: "Update batless to ${{ github.event.inputs.version }}"
+          body: |
+            ## Update batless to ${{ github.event.inputs.version }}
+            
+            This PR updates the Homebrew formula to the latest release of batless.
+            
+            **Changes:**
+            - Updated version to `${{ github.event.inputs.version }}`
+            - Updated SHA256 hash to `${{ github.event.inputs.sha256 }}`
+            
+            **Automated by:** batless-bot 🤖
+          branch: update-formula-${{ github.event.inputs.version }}
+          delete-branch: true
