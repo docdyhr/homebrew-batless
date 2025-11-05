@@ -1,0 +1,49 @@
+name: Daily Formula Test
+
+on:
+  schedule:
+    # Test daily at 6 AM UTC to catch issues early
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  test-current-formula:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Test current formula
+        run: |
+          # Test formula syntax
+          brew audit --strict --formula Formula/batless.rb
+          
+          # Install from source and test
+          brew install --build-from-source Formula/batless.rb
+          
+          # Basic functionality tests
+          batless --version
+          batless --help
+          
+          # Create test file and test modes
+          echo 'fn main() { println!("Hello, world!"); }' > test.rs
+          batless test.rs
+          batless --mode=json test.rs
+          batless --mode=summary test.rs
+          rm test.rs
+          
+          # Cleanup
+          brew uninstall batless
+
+      - name: Report success
+        if: success()
+        run: echo "✅ Daily formula test passed!"
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "❌ Daily formula test failed!"
+          echo "This may indicate an issue with the formula or upstream changes."
