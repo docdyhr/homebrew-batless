@@ -1,8 +1,8 @@
 class Batless < Formula
   desc "Non-blocking, AI-friendly code viewer inspired by bat"
   homepage "https://github.com/docdyhr/batless"
-  url "https://github.com/docdyhr/batless/archive/refs/tags/v0.3.2.tar.gz"
-  sha256 "fb63e8cf238879d895d1bfb1bcaa5b86520446aa71e0afe4ed94f4f83336f485"
+  url "https://github.com/docdyhr/batless/archive/refs/tags/v0.4.0.tar.gz"
+  sha256 "60f8f4ac6961c91817c382254f40ad0c19eddb15c76dcc63772b867e85b4b363"
   license "MIT"
   head "https://github.com/docdyhr/batless.git", branch: "main"
 
